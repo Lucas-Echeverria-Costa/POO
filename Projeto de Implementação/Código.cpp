@@ -1,129 +1,185 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <random>
 
-struct Processo {
-    int id;
-    int chegada;
-    int prioridade;
-    int prioridade_dinamica;
-    int quantuns_alocados;
-    int instrucoes_restantes;
-    int instrucoes_total;
-    int memoria;
-    int io_rate;
-    bool io_ocorrendo;
-    int tempo_io_restante;
-};
+class Simulador {
+private:
+    struct Evento {
+        int tipo; // 0: chegada de processo, 1: término de quantum, 2: término de IO
+        int tempo; // Tempo do evento
+        int processo_id; // ID do processo associado ao evento
+    };
 
-struct CPU {
-    bool ocupada = false;
-    int tempo_ocupada = 0;
-};
+    struct Processo {
+        int id;
+        int chegada;
+        int prioridade;
+        int prioridade_dinamica;
+        int quantuns_alocados;
+        int instrucoes_restantes;
+        int instrucoes_total;
+        int memoria;
+        int io_rate;
+        bool io_ocorrendo;
+        int tempo_io_restante;
+    };
 
-int main() {
+    struct CPU {
+        bool ocupada = false;
+        int tempo_ocupada = 0;
+    };
+
     std::string arquivo_csv;
     int num_cpus;
     int velocidade_cpu;
     int memoria_total;
     int quantum;
-
-    // Solicitar ao usuário os valores necessários
-    std::cout << "Informe o nome do arquivo CSV: ";
-    std::cin >> arquivo_csv;
-    std::cout << "Informe o número de CPUs: ";
-    std::cin >> num_cpus;
-    std::cout << "Informe a velocidade da CPU (MIPS): ";
-    std::cin >> velocidade_cpu;
-    std::cout << "Informe a quantidade total de memória (Gb): ";
-    std::cin >> memoria_total;
-    std::cout << "Informe o quantum (ms): ";
-    std::cin >> quantum;
-
-    int memoria_swap = memoria_total / 2; // Tamanho do swap
-
+    int memoria_swap;
     std::vector<Processo> processos;
-    std::ifstream arquivo(arquivo_csv);
-    std::string linha;
-
-    while (std::getline(arquivo, linha)) {
-        std::istringstream iss(linha);
-        std::string valor;
-        Processo processo;
-        std::getline(iss, valor, ',');
-        processo.id = std::stoi(valor);
-        std::getline(iss, valor, ',');
-        processo.chegada = std::stoi(valor);
-        std::getline(iss, valor, ',');
-        processo.prioridade = std::stoi(valor);
-        processo.prioridade_dinamica = processo.prioridade;
-        processo.quantuns_alocados = 0;
-        std::getline(iss, valor, ',');
-        processo.instrucoes_total = std::stoi(valor);
-        processo.instrucoes_restantes = processo.instrucoes_total;
-        std::getline(iss, valor, ',');
-        processo.memoria = std::stoi(valor);
-        std::getline(iss, valor, ',');
-        processo.io_rate = std::stoi(valor);
-        processo.io_ocorrendo = false;
-        processo.tempo_io_restante = 0;
-        processos.push_back(processo);
-    }
-
-    std::sort(processos.begin(), processos.end(), [](const Processo& p1, const Processo& p2) {
-        return p1.chegada < p2.chegada;
-    });
-
-    int tempo_total = 0;
-    int tempo_ocupado_total = 0;
-    std::vector<CPU> cpus(num_cpus);
+    std::vector<CPU> cpus;
     std::vector<Evento> eventos_futuros;
-    std::default_random_engine gerador;
-    std::uniform_real_distribution<double> distribuicao(0.0, 1.0);
+    int tempo_global;
 
-    // Adiciona eventos de chegada de processos
-    for (const auto& processo : processos) {
-        Evento evento;
-        evento.tipo = 0; // Chegada de processo
-        evento.tempo = processo.chegada;
-        evento.processo_id = processo.id;
-        eventos_futuros.push_back(evento);
+public:
+    Simulador() {}
+
+    void lerEntrada() {
+        // Solicitar ao usuário os valores necessários
+        std::cout << "Informe o nome do arquivo CSV: ";
+        std::cin >> arquivo_csv;
+        std::cout << "Informe o número de CPUs: ";
+        std::cin >> num_cpus;
+        std::cout << "Informe a velocidade da CPU (MIPS): ";
+        std::cin >> velocidade_cpu;
+        std::cout << "Informe a quantidade total de memória (Gb): ";
+        std::cin >> memoria_total;
+        std::cout << "Informe o quantum (ms): ";
+        std::cin >> quantum;
+
+        memoria_swap = memoria_total / 2; // Tamanho do swap
     }
 
-    std::sort(eventos_futuros.begin(), eventos_futuros.end(), [](const Evento& e1, const Evento& e2) {
-        return e1.tempo < e2.tempo;
-    });
+    void lerArquivo() {
+        std::ifstream arquivo(arquivo_csv);
+        std::string linha;
 
-    while (!eventos_futuros.empty()) {
-        // Avança o relógio global para o próximo evento
-        tempo_total = eventos_futuros.front().tempo;
-        // Processa o próximo evento
-        const Evento& evento_atual = eventos_futuros.front();
-        if (evento_atual.tipo == 0) {
-            // Chegada de processo
-            // Implemente aqui a lógica de escalonamento
-            // e adicione os eventos futuros necessários
-        } else if (evento_atual.tipo == 1) {
-            // Término de IO
-            // Implemente aqui a lógica de término de IO
-            for (auto& processo : processos) {
-                if (processo.id == evento_atual.processo_id) {
-                    processo.io_ocorrendo = false;
-                    processo.tempo_io_restante = 0;
-                    break;
-                }
+        while (std::getline(arquivo, linha)) {
+            std::istringstream iss(linha);
+            std::string valor;
+            Processo processo;
+            std::getline(iss, valor, ',');
+            processo.id = std::stoi(valor);
+            std::getline(iss, valor, ',');
+            processo.chegada = std::stoi(valor);
+            std::getline(iss, valor, ',');
+            processo.prioridade = std::stoi(valor);
+            processo.prioridade_dinamica = processo.prioridade;
+            processo.quantuns_alocados = 0;
+            std::getline(iss, valor, ',');
+            processo.instrucoes_total = std::stoi(valor);
+            processo.instrucoes_restantes = processo.instrucoes_total;
+            std::getline(iss, valor, ',');
+            processo.memoria = std::stoi(valor);
+            std::getline(iss, valor, ',');
+            processo.io_rate = std::stoi(valor);
+            processo.io_ocorrendo = false;
+            processo.tempo_io_restante = 0;
+            processos.push_back(processo);
+        }
+
+        std::sort(processos.begin(), processos.end(), [](const Processo& p1, const Processo& p2) {
+            return p1.chegada < p2.chegada;
+        });
+    }
+
+    void simular() {
+        tempo_global = 0;
+        while (!eventos_futuros.empty()) {
+            tempo_global = eventos_futuros.front().tempo;
+            const Evento& evento_atual = eventos_futuros.front();
+            if (evento_atual.tipo == 0) {
+                escalonarProcesso(evento_atual.processo_id);
+            } else if (evento_atual.tipo == 1) {
+                finalizarQuantum(evento_atual.processo_id);
+            } else if (evento_atual.tipo == 2) {
+                finalizarIO(evento_atual.processo_id);
             }
-            // Adicionar processos desbloqueados à lista de prontos
-            for (const auto& processo : processos) {
-                if (!processo.io_ocorrendo && /* Outras condições de escalonamento */) {
-                    Evento evento_novo;
-                    evento_novo.tipo = 0; // Chegada de processo
-                    evento_novo.tempo = tempo_total; // Ou tempo_total + quantum para evitar reescalonamento imediato
-                    evento_novo.processo_id = processo.id;
-                    eventos_futuros.push_back(evento_novo);
+            eventos_futuros.erase(eventos_futuros.begin());
+        }
+    }
+
+    void escalonarProcesso(int processo_id) {
+        for (auto& processo : processos) {
+            if (processo.id == processo_id) {
+                std::cout << "Escalonando processo " << processo_id << " em uma CPU." << std::endl;
+                // Lógica de escalonamento aqui
+                // Por exemplo, alocar o processo em uma CPU disponível
+                for (auto& cpu : cpus) {
+                    if (!cpu.ocupada) {
+                        cpu.ocupada = true;
+                        cpu.tempo_ocupada = 0;
+                        processo.quantuns_alocados++;
+                        // Adicionar evento de término do quantum
+                        adicionarEvento(1, tempo_global + quantum, processo_id);
+                        break;
+                    }
                 }
+                break;
             }
         }
-        // Remove o evento processado da lista de eventos futuros
-        eventos_futuros.erase(eventos_futuros.begin());
     }
+
+    void finalizarQuantum(int processo_id) {
+        for (auto& processo : processos) {
+            if (processo.id == processo_id) {
+                std::cout << "Processo " << processo_id << " finalizou quantum." << std::endl;
+                processo.instrucoes_restantes -= quantum;
+                if (processo.instrucoes_restantes <= 0) {
+                    // Processo terminou
+                    // Implemente a remoção do processo do sistema se necessário
+                } else {
+                    // Adicionar evento de término do quantum seguinte
+                    adicionarEvento(1, tempo_global + quantum, processo_id);
+                }
+                break;
+            }
+        }
+    }
+
+    void finalizarIO(int processo_id) {
+        for (auto& processo : processos) {
+            if (processo.id == processo_id) {
+                std::cout << "Processo " << processo_id << " finalizou operação de IO." << std::endl;
+                processo.io_ocorrendo = false;
+                processo.tempo_io_restante = 0;
+                // Adicionar processo desbloqueado à lista de prontos
+                adicionarEvento(0, tempo_global, processo_id);
+                break;
+            }
+        }
+    }
+
+    void adicionarEvento(int tipo, int tempo, int processo_id) {
+        eventos_futuros.push_back({tipo, tempo, processo_id});
+        std::sort(eventos_futuros.begin(), eventos_futuros.end(), [](const Evento& e1, const Evento& e2) {
+            return e1.tempo < e2.tempo;
+        });
+    }
+
+    void executar() {
+        lerEntrada();
+        lerArquivo();
+        simular();
+    }
+};
+
+int main() {
+    Simulador simulador;
+    simulador.executar();
 
     return 0;
 }
