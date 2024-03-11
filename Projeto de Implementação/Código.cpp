@@ -1,16 +1,3 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <random>
-
-struct Evento {
-    int tipo; // 0: chegada de processo, 1: término de IO
-    int tempo; // Tempo do evento
-    int processo_id; // ID do processo associado ao evento
-};
 
 struct Processo {
     int id;
@@ -31,17 +18,25 @@ struct CPU {
     int tempo_ocupada = 0;
 };
 
-int main(int argc, char* argv[]) {
-    if (argc != 6) {
-        std::cerr << "Uso: " << argv[0] << " arquivo_csv num_cpus velocidade_cpu memoria_total quantum\n";
-        return 1;
-    }
+int main() {
+    std::string arquivo_csv;
+    int num_cpus;
+    int velocidade_cpu;
+    int memoria_total;
+    int quantum;
 
-    std::string arquivo_csv = argv[1];
-    int num_cpus = std::stoi(argv[2]);
-    int velocidade_cpu = std::stoi(argv[3]);
-    int memoria_total = std::stoi(argv[4]);
-    int quantum = std::stoi(argv[5]);
+    // Solicitar ao usuário os valores necessários
+    std::cout << "Informe o nome do arquivo CSV: ";
+    std::cin >> arquivo_csv;
+    std::cout << "Informe o número de CPUs: ";
+    std::cin >> num_cpus;
+    std::cout << "Informe a velocidade da CPU (MIPS): ";
+    std::cin >> velocidade_cpu;
+    std::cout << "Informe a quantidade total de memória (Gb): ";
+    std::cin >> memoria_total;
+    std::cout << "Informe o quantum (ms): ";
+    std::cin >> quantum;
+
     int memoria_swap = memoria_total / 2; // Tamanho do swap
 
     std::vector<Processo> processos;
@@ -107,12 +102,22 @@ int main(int argc, char* argv[]) {
             // e adicione os eventos futuros necessários
         } else if (evento_atual.tipo == 1) {
             // Término de IO
+            // Implemente aqui a lógica de término de IO
             for (auto& processo : processos) {
                 if (processo.id == evento_atual.processo_id) {
                     processo.io_ocorrendo = false;
-                    // Implemente aqui a lógica de término de IO
-                    // e adicione os eventos futuros necessários
+                    processo.tempo_io_restante = 0;
                     break;
+                }
+            }
+            // Adicionar processos desbloqueados à lista de prontos
+            for (const auto& processo : processos) {
+                if (!processo.io_ocorrendo && /* Outras condições de escalonamento */) {
+                    Evento evento_novo;
+                    evento_novo.tipo = 0; // Chegada de processo
+                    evento_novo.tempo = tempo_total; // Ou tempo_total + quantum para evitar reescalonamento imediato
+                    evento_novo.processo_id = processo.id;
+                    eventos_futuros.push_back(evento_novo);
                 }
             }
         }
